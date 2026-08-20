@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DAILY_PRICE_HISTORY_MAX_POINTS,
   HistoricalPricePointSchema,
+  PoolDailyPriceHistorySchema,
   PoolMarketSnapshotSchema,
   RECIPROCAL_PRICE_TOLERANCE,
 } from "./index";
@@ -292,5 +294,178 @@ describe("HistoricalPricePointSchema", () => {
     ["a coarse timestamp", { timestamp: "2026-08-20T09:15:00Z", price: 2500 }],
   ])("rejects %s", (_label, value) => {
     expect(HistoricalPricePointSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe("PoolDailyPriceHistorySchema", () => {
+  const RANGE_START = "2026-07-20T00:00:00.000Z";
+  const RANGE_END = "2026-08-20T00:00:00.000Z";
+  const DAY_MS = 86_400_000;
+
+  const point = (dayIndex: number, price = 2500 + dayIndex) => ({
+    timestamp: new Date(Date.parse(RANGE_START) + dayIndex * DAY_MS).toISOString(),
+    price,
+  });
+
+  const history = (overrides: Record<string, unknown> = {}) => ({
+    pool: { protocolVersion: "v3", chainId: 1, id: `0x${"d".repeat(40)}` },
+    fetchedAt: "2026-08-20T09:15:00.000Z",
+    sourceBlockNumber: "21500000",
+    sourceBlockTimestamp: "2026-08-20T09:14:48.000Z",
+    rangeStart: RANGE_START,
+    rangeEndExclusive: RANGE_END,
+    interval: "1d",
+    priceDirection: "token0PriceInToken1",
+    points: Array.from({ length: 31 }, (_unused, index) => point(index)),
+    source: "uniswap-v3-subgraph",
+    ...overrides,
+  });
+
+  it("accepts a full, well-ordered series", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history()).success).toBe(true);
+  });
+
+  it("accepts a short series, because a gap is not an error", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(0), point(5)] })).success).toBe(true);
+  });
+
+  it("accepts an empty series at the schema level", () => {
+    // Whether too-short is usable is the adapter's policy, not the shape's.
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [] })).success).toBe(true);
+  });
+
+  it("accepts null source block metadata", () => {
+    const result = PoolDailyPriceHistorySchema.safeParse(
+      history({ sourceBlockNumber: null, sourceBlockTimestamp: null }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it(`rejects more than ${DAILY_PRICE_HISTORY_MAX_POINTS} points`, () => {
+    const tooMany = Array.from({ length: DAILY_PRICE_HISTORY_MAX_POINTS + 1 }, (_unused, index) => point(index));
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: tooMany })).success).toBe(false);
+  });
+
+  it("rejects a range whose end is not after its start", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ rangeEndExclusive: RANGE_START })).success).toBe(false);
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ rangeStart: RANGE_END, rangeEndExclusive: RANGE_START })).success).toBe(false);
+  });
+
+  it("rejects a point before rangeStart", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(-1), point(0)] })).success).toBe(false);
+  });
+
+  it("rejects a point at or after rangeEndExclusive", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(0), point(31)] })).success).toBe(false);
+  });
+
+  it("rejects duplicate timestamps rather than de-duplicating them", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(3), point(3)] })).success).toBe(false);
+  });
+
+  it("rejects descending points", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(5), point(2)] })).success).toBe(false);
+  });
+
+  it.each([
+    ["a zero price", 0],
+    ["a negative price", -1],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+  ])("rejects %s in a point", (_label, price) => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ points: [point(0, price)] })).success).toBe(false);
+  });
+
+  it.each([
+    ["another chain", { pool: { protocolVersion: "v3", chainId: 8453, id: `0x${"d".repeat(40)}` } }],
+    ["a v4 pool", { pool: { protocolVersion: "v4", chainId: 1, id: `0x${"c".repeat(64)}` } }],
+    ["a foreign source", { source: "derived-analytics" }],
+    ["an hourly interval", { interval: "1h" }],
+    ["the opposite price direction", { priceDirection: "token1PriceInToken0" }],
+  ])("rejects %s", (_label, overrides) => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history(overrides)).success).toBe(false);
+  });
+
+  it.each([
+    ["a coarse fetchedAt", { fetchedAt: "2026-08-20T09:15:00Z" }],
+    ["a coarse rangeStart", { rangeStart: "2026-07-20T00:00:00Z" }],
+    ["a block number as a JS number", { sourceBlockNumber: 21_500_000 }],
+  ])("rejects %s", (_label, overrides) => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history(overrides)).success).toBe(false);
+  });
+
+  it("rejects an unexpected field", () => {
+    expect(PoolDailyPriceHistorySchema.safeParse(history({ volatility: 0.42 })).success).toBe(false);
+  });
+
+  describe("daily alignment", () => {
+    const atOffset = (dayIndex: number, offsetMs: number, price = 2500) => ({
+      timestamp: new Date(Date.parse(RANGE_START) + dayIndex * DAY_MS + offsetMs).toISOString(),
+      price,
+    });
+
+    it("accepts midnight-aligned daily points", () => {
+      const result = PoolDailyPriceHistorySchema.safeParse(
+        history({ points: [point(0), point(1), point(30)] }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects a noon point that is otherwise in range and correctly ordered", () => {
+      // Inside [rangeStart, rangeEndExclusive), strictly after its predecessor,
+      // and still not a daily close.
+      const points = [point(0), atOffset(1, 12 * 60 * 60 * 1000)];
+      const result = PoolDailyPriceHistorySchema.safeParse(history({ points }));
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((issue) => issue.message.includes("UTC day boundary"))).toBe(
+        true,
+      );
+    });
+
+    it("rejects an hourly point", () => {
+      const points = [point(0), atOffset(1, 60 * 60 * 1000)];
+      expect(PoolDailyPriceHistorySchema.safeParse(history({ points })).success).toBe(false);
+    });
+
+    it("rejects a point offset by a single millisecond", () => {
+      expect(
+        PoolDailyPriceHistorySchema.safeParse(history({ points: [atOffset(1, 1)] })).success,
+      ).toBe(false);
+    });
+
+    it("rejects two distinct timestamps from the same UTC calendar day", () => {
+      const points = [point(3), atOffset(3, 6 * 60 * 60 * 1000)];
+      const result = PoolDailyPriceHistorySchema.safeParse(history({ points }));
+
+      expect(result.success).toBe(false);
+      const messages = result.error?.issues.map((issue) => issue.message) ?? [];
+      expect(messages.some((message) => message.includes("per UTC calendar day"))).toBe(true);
+    });
+
+    it("rejects a non-midnight rangeStart", () => {
+      const result = PoolDailyPriceHistorySchema.safeParse(
+        history({ rangeStart: "2026-07-20T00:00:00.001Z", points: [] }),
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((issue) => issue.path[0] === "rangeStart")).toBe(true);
+    });
+
+    it("rejects a non-midnight rangeEndExclusive", () => {
+      const result = PoolDailyPriceHistorySchema.safeParse(
+        history({ rangeEndExclusive: "2026-08-20T09:15:00.000Z", points: [] }),
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((issue) => issue.path[0] === "rangeEndExclusive")).toBe(true);
+    });
+
+    it("keeps HistoricalPricePointSchema itself interval-agnostic", () => {
+      // Daily alignment is a property of this wrapper, not of a price point, so
+      // hourly and weekly series can reuse the point schema unchanged.
+      const noon = { timestamp: "2026-07-20T12:00:00.000Z", price: 2500 };
+      expect(HistoricalPricePointSchema.safeParse(noon).success).toBe(true);
+    });
   });
 });

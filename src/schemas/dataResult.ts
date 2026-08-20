@@ -26,6 +26,12 @@ export const DataFailureReasonSchema = z.enum([
    */
   "stale-data",
   "not-found",
+  /**
+   * The source answered with valid data, but too few observations to support the
+   * calculation being asked for. Distinct from `not-found`: the pool exists and
+   * the query succeeded — the history behind it is simply too short.
+   */
+  "insufficient-data",
   "unknown",
 ]);
 

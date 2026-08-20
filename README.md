@@ -12,13 +12,26 @@ not guarantee returns, and cannot attest that any smart contract is safe.
 Early. The landing page is static, and there is no AI integration, persistence,
 authentication, wallet connection or transaction capability of any kind.
 
-The first read-only market-data adapter exists: a server-only reader that fetches
-one Ethereum mainnet Uniswap v3 pool from The Graph and normalises it into a
-`PoolMarketSnapshot`. It is not wired to any route or component yet. Its limits
-are deliberate:
+Two read-only market-data adapters exist, both server-only readers over The Graph
+and neither wired to any route or component yet:
+
+1. **Current pool snapshot** — one Ethereum mainnet Uniswap v3 pool, normalised
+   into a `PoolMarketSnapshot`.
+2. **Daily price history** — the previous 31 *completed* UTC days of closing
+   prices for one such pool, normalised into a `PoolDailyPriceHistory`. 31 closes
+   give 30 daily returns, which is what a 30-day volatility figure needs. The
+   current, still-incomplete UTC day is always excluded. Nothing consumes this
+   yet: no volatility, return or risk calculation is implemented.
+
+Days the source never indexed are reported as gaps, never invented. There is no
+forward-filling of a previous close and no treating a missing day as zero, so a
+short series stays visibly short rather than looking complete.
+
+Shared limits of both adapters:
 
 - Ethereum mainnet (`chainId` 1) and Uniswap v3 only.
 - One pool per call, by address.
+- No wallet, transaction, signing or approval capability of any kind.
 - Rolling 24h/7d/30d volume is **not** available in this phase. The pool entity
   exposes a lifetime cumulative total, which is not a rolling window, so those
   fields stay `null` and the call returns a `partial` result naming them. No

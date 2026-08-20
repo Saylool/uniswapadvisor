@@ -8,41 +8,28 @@ import {
   Uint128StringSchema,
 } from "../../schemas";
 import {
+  evaluateSourceFreshness,
+  FRESHNESS_UNVERIFIED_WARNING,
+  MAX_SOURCE_CLOCK_SKEW_MS,
+  MAX_SOURCE_LAG_MS,
+} from "./v3SourceFreshness";
+import {
   convertNonNegativeDecimal,
   convertSafeInteger,
+  unixSecondsToIso,
   V3PoolQueryResponseSchema,
 } from "./v3SubgraphRawResponse";
+
+/*
+ * Re-exported so this module stays the entry point callers already import the
+ * freshness thresholds from, while the policy itself lives in one place.
+ */
+export { MAX_SOURCE_CLOCK_SKEW_MS, MAX_SOURCE_LAG_MS };
 
 /** This adapter reads Ethereum mainnet only; multi-chain support is not modelled yet. */
 export const ETHEREUM_MAINNET_CHAIN_ID = 1;
 
-/** The largest instant a JS `Date` can represent, in milliseconds. */
-const MAX_DATE_MS = 8.64e15;
-
-/**
- * How far behind the chain a source block may be before its figures stop being
- * usable. Fifteen minutes is roughly 75 Ethereum blocks: long enough to ride out
- * ordinary indexer lag, short enough that a price or tick has not usually moved
- * to somewhere a liquidity decision would be made differently.
- */
-export const MAX_SOURCE_LAG_MS = 15 * 60 * 1000;
-
-/**
- * How far *ahead* of our own clock a source block may appear before the response
- * is treated as contradictory rather than merely skewed.
- *
- * A block cannot genuinely be mined in our future, so anything beyond a small
- * allowance for clock drift between this server and the indexer means one of the
- * two timestamps is wrong — and a negative lag would otherwise sail through the
- * staleness check untouched.
- */
-export const MAX_SOURCE_CLOCK_SKEW_MS = 2 * 60 * 1000;
-
 const MALFORMED = "The market data source returned a response this application cannot verify.";
-const STALE =
-  "The market data source is too far behind the chain for these figures to be treated as current.";
-const FUTURE_BLOCK_TIME =
-  "The market data source reported a block time ahead of this server's clock, so its figures cannot be verified.";
 const INDEXING_ERRORS =
   "The market data source reported indexing errors, so its figures cannot be treated as verified.";
 const NOT_FOUND = "No Uniswap v3 pool was found for this address on Ethereum mainnet.";
@@ -62,15 +49,6 @@ const ROLLING_VOLUME_WARNING =
   "Rolling 24h/7d/30d volume is not available from this data source yet; those fields are null rather than estimated.";
 
 /**
- * Raised when the source reports no block time. Silence would let an unverifiable
- * snapshot read exactly like a verified-fresh one, and `fetchedAt` must never be
- * substituted for the missing value — it records when we asked, not what the
- * answer describes.
- */
-const FRESHNESS_UNVERIFIED_WARNING =
-  "The data source did not report a block time, so how current these figures are could not be verified.";
-
-/**
  * Fields that may legitimately be null in a snapshot built from this source,
  * listed in the order the domain schema declares them.
  *
@@ -86,13 +64,6 @@ const NULLABLE_SNAPSHOT_FIELDS = [
   "volume30dUsd",
   "tick",
 ] as const satisfies readonly (keyof PoolMarketSnapshot & string)[];
-
-/** Converts a Unix second count to fixed-millisecond UTC, or null if unrepresentable. */
-const unixSecondsToIso = (seconds: number): string | null => {
-  const milliseconds = seconds * 1000;
-  if (!Number.isFinite(milliseconds) || Math.abs(milliseconds) > MAX_DATE_MS) return null;
-  return new Date(milliseconds).toISOString();
-};
 
 export type NormalizeV3PoolSnapshotInput = {
   /** The decoded JSON body, still untrusted. */
@@ -227,13 +198,11 @@ export const normalizeV3PoolSnapshot = ({
    * looking verified, so the check is a gate rather than a warning.
    */
   const blockTime = snapshot.data.sourceBlockTimestamp;
-  if (blockTime !== null) {
-    const lagMs = Date.parse(snapshot.data.fetchedAt) - Date.parse(blockTime);
-    if (lagMs > MAX_SOURCE_LAG_MS) return unavailable("stale-data", STALE);
-    if (lagMs < -MAX_SOURCE_CLOCK_SKEW_MS) {
-      return unavailable("invalid-response", FUTURE_BLOCK_TIME);
-    }
-  }
+  const freshness = evaluateSourceFreshness({
+    fetchedAt: snapshot.data.fetchedAt,
+    sourceBlockTimestamp: blockTime,
+  });
+  if (!freshness.ok) return unavailable(freshness.reason, freshness.message);
 
   const missing = NULLABLE_SNAPSHOT_FIELDS.filter((field) => snapshot.data[field] === null);
   const [firstMissing, ...remainingMissing] = missing;

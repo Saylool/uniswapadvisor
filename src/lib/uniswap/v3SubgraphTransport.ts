@@ -61,7 +61,12 @@ export type SubgraphQueryRequest = {
   readonly apiKey: string;
   readonly subgraphId: string;
   readonly query: string;
-  readonly variables: Readonly<Record<string, string>>;
+  /**
+   * GraphQL variable values. Numbers are permitted because the subgraph's date
+   * filters are `Int!`; every value is JSON-encoded into the body, never spliced
+   * into the query text.
+   */
+  readonly variables: Readonly<Record<string, string | number>>;
   readonly fetchImpl: FetchLike;
   readonly timeoutMs: number;
 };

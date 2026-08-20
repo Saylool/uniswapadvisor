@@ -12,6 +12,7 @@ describe("DataFailureReasonSchema", () => {
     ["invalid-response"],
     ["stale-data"],
     ["not-found"],
+    ["insufficient-data"],
     ["unknown"],
   ])("accepts the %s category", (reason) => {
     expect(DataFailureReasonSchema.safeParse(reason).success).toBe(true);

@@ -150,3 +150,147 @@ export const HistoricalPricePointSchema = z.strictObject({
 });
 
 export type HistoricalPricePoint = z.infer<typeof HistoricalPricePointSchema>;
+
+/** The number of completed daily observations a full history carries. */
+export const DAILY_PRICE_HISTORY_MAX_POINTS = 31;
+
+/** Ethereum mainnet; this history is not modelled for other chains yet. */
+const HISTORY_CHAIN_ID = 1;
+
+const asInstant = (timestamp: string): number => Date.parse(timestamp);
+
+/** Milliseconds in one UTC day. Fixed: Unix time has no leap seconds. */
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * True when an instant sits exactly on a UTC midnight.
+ *
+ * Divisibility of epoch milliseconds is the whole test — no locale parsing, no
+ * `getHours()`, no timezone lookup — because the Unix epoch is itself UTC
+ * midnight and days are a constant length in Unix time.
+ */
+const isUtcDayAligned = (timestamp: string): boolean => asInstant(timestamp) % MS_PER_DAY === 0;
+
+/** Which UTC calendar day an instant belongs to, as a whole-day epoch index. */
+const utcDayIndex = (timestamp: string): number => Math.floor(asInstant(timestamp) / MS_PER_DAY);
+
+const isStrictlyAscending = (points: readonly HistoricalPricePoint[]): boolean => {
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    if (previous === undefined || current === undefined) return false;
+    if (asInstant(current.timestamp) <= asInstant(previous.timestamp)) return false;
+  }
+  return true;
+};
+
+/**
+ * A normalized series of daily closing prices for one pool.
+ *
+ * Built to feed deterministic return and volatility maths later, which is why the
+ * shape is stricter than it looks: those calculations are only meaningful over
+ * observations that are real, ordered, distinct and inside a stated window.
+ *
+ * `points` may be shorter than the window implies. A source that never indexed a
+ * given day simply has no observation for it, and inventing one — by
+ * forward-filling the previous close, or by treating the gap as zero — would put
+ * a fabricated number into a volatility figure. Gaps are reported through the
+ * result's `missingFields`, never patched here.
+ */
+export const PoolDailyPriceHistorySchema = z
+  .strictObject({
+    pool: PoolReferenceSchema,
+    /** When the response arrived, not what it describes. */
+    fetchedAt: IsoTimestampSchema,
+    sourceBlockNumber: UnsignedIntegerStringSchema.nullable(),
+    sourceBlockTimestamp: IsoTimestampSchema.nullable(),
+
+    /** Inclusive start of the requested window. */
+    rangeStart: IsoTimestampSchema,
+    /**
+     * Exclusive end of the requested window. Exclusive so the current, still
+     * incomplete day can be named as the boundary without being included.
+     */
+    rangeEndExclusive: IsoTimestampSchema,
+
+    /** Bucket width. Only daily buckets are modelled today. */
+    interval: z.literal("1d"),
+    /**
+     * Which direction every `price` is quoted in, stated once for the series
+     * rather than left to the reader. Here: how much token1 one token0 buys.
+     */
+    priceDirection: z.literal("token0PriceInToken1"),
+
+    points: z.array(HistoricalPricePointSchema).max(DAILY_PRICE_HISTORY_MAX_POINTS),
+
+    source: z.literal("uniswap-v3-subgraph"),
+  })
+  .refine((history) => asInstant(history.rangeStart) < asInstant(history.rangeEndExclusive), {
+    error: "rangeStart must be earlier than rangeEndExclusive.",
+    path: ["rangeStart"],
+  })
+  .refine(
+    (history) =>
+      history.pool.chainId === HISTORY_CHAIN_ID && history.pool.protocolVersion === "v3",
+    {
+      // The only producer is the Uniswap v3 mainnet subgraph, so a pool reference
+      // from anywhere else means the series was assembled from mismatched sources.
+      error: "A Uniswap v3 subgraph history can only describe an Ethereum mainnet v3 pool.",
+      path: ["pool"],
+    },
+  )
+  .refine(
+    (history) =>
+      history.points.every((point) => {
+        const instant = asInstant(point.timestamp);
+        return (
+          instant >= asInstant(history.rangeStart) &&
+          instant < asInstant(history.rangeEndExclusive)
+        );
+      }),
+    {
+      error: "Every point must fall within [rangeStart, rangeEndExclusive).",
+      path: ["points"],
+    },
+  )
+  .refine((history) => isStrictlyAscending(history.points), {
+    // Strict ordering rejects duplicate timestamps too: two closes for one day is
+    // contradictory provider data, not something to silently de-duplicate.
+    error: "Points must be strictly ascending by timestamp, with no duplicates.",
+    path: ["points"],
+  })
+  /*
+   * The daily invariants below give `interval: "1d"` its meaning here rather than
+   * leaving it to whichever adapter happened to build the value. A caller that
+   * constructs a history by hand, or a future second source, gets the same rules.
+   *
+   * They live on this wrapper and not on `HistoricalPricePointSchema`, which stays
+   * interval-agnostic so hourly or weekly series can reuse it unchanged.
+   */
+  .refine((history) => isUtcDayAligned(history.rangeStart), {
+    error: "rangeStart must fall exactly on a UTC day boundary.",
+    path: ["rangeStart"],
+  })
+  .refine((history) => isUtcDayAligned(history.rangeEndExclusive), {
+    error: "rangeEndExclusive must fall exactly on a UTC day boundary.",
+    path: ["rangeEndExclusive"],
+  })
+  .refine((history) => history.points.every((point) => isUtcDayAligned(point.timestamp)), {
+    // A close is the day's settled price, so it is stamped at that day's boundary.
+    // A midday timestamp is a different measurement wearing a daily label.
+    error: "Every daily point must fall exactly on a UTC day boundary.",
+    path: ["points"],
+  })
+  .refine(
+    (history) =>
+      new Set(history.points.map((point) => utcDayIndex(point.timestamp))).size ===
+      history.points.length,
+    {
+      // Stated independently of the alignment rule so the constraint survives even
+      // if alignment is ever relaxed: one calendar day yields at most one close.
+      error: "At most one observation is allowed per UTC calendar day.",
+      path: ["points"],
+    },
+  );
+
+export type PoolDailyPriceHistory = z.infer<typeof PoolDailyPriceHistorySchema>;

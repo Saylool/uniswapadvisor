@@ -80,6 +80,20 @@ export const convertSafeInteger = (raw: string): IntegerConversion => {
   return Number.isSafeInteger(value) ? { ok: true, value } : { ok: false };
 };
 
+/** The largest instant a JS `Date` can represent, in milliseconds. */
+const MAX_DATE_MS = 8.64e15;
+
+/**
+ * Converts a Unix second count to fixed-millisecond UTC, or `null` when the value
+ * is too large for a `Date` to hold — in which case the provider sent something
+ * that cannot be a block time, and the caller fails closed.
+ */
+export const unixSecondsToIso = (seconds: number): string | null => {
+  const milliseconds = seconds * 1000;
+  if (!Number.isFinite(milliseconds) || Math.abs(milliseconds) > MAX_DATE_MS) return null;
+  return new Date(milliseconds).toISOString();
+};
+
 /**
  * `_Block_.number` and `_Block_.timestamp` are GraphQL `Int`, so they arrive as
  * JSON numbers rather than strings. `z.int()` rejects non-integers, non-finite
@@ -90,7 +104,7 @@ const RawBlockSchema = z.object({
   timestamp: z.int().min(0).nullable(),
 });
 
-const RawMetaSchema = z.object({
+export const RawMetaSchema = z.object({
   block: RawBlockSchema,
   hasIndexingErrors: z.boolean(),
 });
