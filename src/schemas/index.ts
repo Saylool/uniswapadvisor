@@ -8,3 +8,4 @@ export * from "./dataSource";
 export * from "./uniswap";
 export * from "./market";
 export * from "./dataResult";
+export * from "./analytics";

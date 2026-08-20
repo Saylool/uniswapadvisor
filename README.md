@@ -27,6 +27,19 @@ Days the source never indexed are reported as gaps, never invented. There is no
 forward-filling of a previous close and no treating a missing day as zero, so a
 short series stays visibly short rather than looking complete.
 
+A first deterministic analytics layer sits on top of that history: daily
+close-to-close log returns and historical volatility. It is pure — no clock, no
+network, no environment — so the same input always yields the same output. A
+return is only computed between observations exactly one UTC day apart; a pair
+straddling a missing day is skipped rather than rescaled into a daily figure, and
+the result reports how much of the window it could actually use. Volatility is the
+sample standard deviation (divisor `n - 1`) of those log returns, annualised by
+`sqrt(365)` because crypto markets trade every calendar day. Figures are decimal
+ratios, not percentages.
+
+Nothing consumes the analytics yet: no recommendations, risk categories, AI, API
+routes or UI.
+
 Shared limits of both adapters:
 
 - Ethereum mainnet (`chainId` 1) and Uniswap v3 only.
