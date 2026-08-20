@@ -9,9 +9,22 @@ not guarantee returns, and cannot attest that any smart contract is safe.
 
 ## Status
 
-Project foundation only. There is no market data, no AI integration, no
-persistence, no authentication and no wallet connectivity in this build. The
-landing page is static.
+Early. The landing page is static, and there is no AI integration, persistence,
+authentication, wallet connection or transaction capability of any kind.
+
+The first read-only market-data adapter exists: a server-only reader that fetches
+one Ethereum mainnet Uniswap v3 pool from The Graph and normalises it into a
+`PoolMarketSnapshot`. It is not wired to any route or component yet. Its limits
+are deliberate:
+
+- Ethereum mainnet (`chainId` 1) and Uniswap v3 only.
+- One pool per call, by address.
+- Rolling 24h/7d/30d volume is **not** available in this phase. The pool entity
+  exposes a lifetime cumulative total, which is not a rolling window, so those
+  fields stay `null` and the call returns a `partial` result naming them. No
+  figure is estimated to fill the gap.
+- Full `V3Pool` metadata is not built, because the pool entity does not report
+  `tickSpacing`.
 
 ## Getting started
 
@@ -90,7 +103,11 @@ user input
 - Prompts are composed as `base + feature + user input + verified data`. There is
   no single prompt containing all application logic.
 - Server-only modules (anything reading `process.env` or holding a credential)
-  must never be imported by a Client Component.
+  import `server-only` and are never re-exported through a barrel file, so a
+  Client Component cannot reach a credential path by accident.
+- Transport and normalisation stay pure and take an injected `fetch` and clock, so
+  the whole flow is testable without the server-only wrapper and without network
+  access.
 - Missing or stale data returns an explicit missing-data state. The application
   must never substitute fabricated market values.
 
@@ -98,3 +115,13 @@ user input
 
 All credentials are server-side. See `.env.example`. Never prefix a credential
 with `NEXT_PUBLIC_` — that inlines it into the client bundle.
+
+The v3 market-data reader needs both of:
+
+| Variable | Purpose |
+| --- | --- |
+| `THE_GRAPH_API_KEY` | Sent only as an `Authorization: Bearer` header, never in a URL or body. |
+| `UNISWAP_V3_ETHEREUM_SUBGRAPH_ID` | The stable **Subgraph ID** from The Graph Explorer — not a deployment/IPFS id. The gateway resolves it to the latest sufficiently synced deployment. |
+
+With either absent or blank, the reader returns an `unavailable` result with
+reason `configuration-error` and makes no network request.

@@ -4,11 +4,13 @@ import { DataFailureReasonSchema } from "./index";
 
 describe("DataFailureReasonSchema", () => {
   it.each([
+    ["invalid-input"],
     ["configuration-error"],
     ["network-error"],
     ["timeout"],
     ["rate-limited"],
     ["invalid-response"],
+    ["stale-data"],
     ["not-found"],
     ["unknown"],
   ])("accepts the %s category", (reason) => {

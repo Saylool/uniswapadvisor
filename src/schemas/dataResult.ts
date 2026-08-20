@@ -5,6 +5,13 @@ import { z } from "zod";
  * can branch on them and the UI can pick its own wording per case.
  */
 export const DataFailureReasonSchema = z.enum([
+  /**
+   * The caller supplied something this application could not use, such as a
+   * malformed pool address. Distinct from `configuration-error`, which is the
+   * operator's problem, and from `not-found`, which means the input was well
+   * formed but matched nothing.
+   */
+  "invalid-input",
   /** A required credential or setting is absent or malformed. */
   "configuration-error",
   "network-error",
@@ -12,6 +19,12 @@ export const DataFailureReasonSchema = z.enum([
   "rate-limited",
   /** The source answered, but the payload failed schema validation. */
   "invalid-response",
+  /**
+   * The source answered with well-formed data describing a moment too far in the
+   * past to act on. Distinct from `invalid-response`: nothing is malformed, the
+   * figures are simply no longer current enough to reason about.
+   */
+  "stale-data",
   "not-found",
   "unknown",
 ]);
