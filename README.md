@@ -30,11 +30,15 @@ Open http://localhost:3000.
 | `npm run dev`       | Development server                                 |
 | `npm run build`     | Production build (also type-checks)                |
 | `npm run start`     | Serve the production build                         |
+| `npm test`          | Run the Vitest runtime regression suite once       |
 | `npm run lint`      | ESLint                                             |
 | `npm run typecheck` | Generate route types, then `tsc --noEmit`          |
 
 `typecheck` runs `next typegen` first because the App Router type helpers
 (`PageProps`, `LayoutProps`, `RouteContext`) are generated, not hand-written.
+It also checks the persistent compile-time assertions in
+`src/schemas/dataResult.type-test.ts`; those assertions are intentionally not
+collected by Vitest as runtime tests.
 
 ## Architecture
 
@@ -61,13 +65,26 @@ user input
 | `src/lib/analytics`   | Deterministic, dependency-free calculations: volatility, ranges, ratios.    |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
-| `src/schemas`         | Zod schemas validating external responses and AI structured output.         |
-| `src/types`           | Internal application types, normalised away from external API shapes.       |
+| `src/schemas`         | The normalized domain contracts: Zod schemas plus the types inferred from them. |
+| `src/types`           | Internal types with no runtime shape to validate, e.g. UI view models.      |
 
 ### Boundary rules
 
-- External API shapes never reach components. Normalise into internal types
-  (`src/types`) at the service boundary, validating with `src/schemas`.
+- External API shapes never reach components. Service modules normalise them
+  into the domain contracts in `src/schemas` at the boundary, and the rest of
+  the application only ever sees those.
+- Domain types are inferred from their Zod schema (`z.infer`) rather than
+  declared alongside it, so a schema and its type cannot drift apart.
+- Every data-fetching module returns `DataResult<T>`, which distinguishes
+  success, partial and unavailable. Missing financial metrics are `null`;
+  `0` means a source reported zero.
+- Fetch time and source freshness are separate fields. `fetchedAt` records when a
+  response arrived; `sourceBlockNumber` / `sourceBlockTimestamp` record what it
+  describes. A lagging indexer must never look fresh, so fetch time is never
+  copied into the source-block fields.
+- Protocol limits that differ between v3 and v4 (fee ceiling, tick spacing, whether
+  the zero address is a valid currency) are validated per protocol variant, not by
+  a shared permissive schema.
 - Analytics functions stay pure and deterministic so their results are
   reproducible and testable without network access.
 - Prompts are composed as `base + feature + user input + verified data`. There is
