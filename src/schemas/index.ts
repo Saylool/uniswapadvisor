@@ -9,3 +9,4 @@ export * from "./uniswap";
 export * from "./market";
 export * from "./dataResult";
 export * from "./analytics";
+export * from "./priceBand";

@@ -37,8 +37,26 @@ sample standard deviation (divisor `n - 1`) of those log returns, annualised by
 `sqrt(365)` because crypto markets trade every calendar day. Figures are decimal
 ratios, not percentages.
 
-Nothing consumes the analytics yet: no recommendations, risk categories, AI, API
-routes or UI.
+On top of that sits a deterministic continuous **price band**: a zero-drift,
+log-symmetric range around the current pool price, scaled from historical
+volatility by `sqrt(horizonDays / 365)` and a caller-supplied standard-deviation
+multiplier. Because it is symmetric in log space it is deliberately asymmetric in
+percentage terms — a band that reaches half price downward reaches double price
+upward, and only one of those is "50%".
+
+A band is **not a prediction and not a probability guarantee**. The multiplier is
+not a confidence level: calling `2` a "95% band" would need a distributional
+assumption this project does not establish. Zero volatility collapses the band
+onto the current price rather than inventing a minimum width.
+
+Bands are **not yet Uniswap ticks** and are not deployable as positions. Tick
+conversion needs the pool's verified tick spacing, token ordering and token
+decimals, none of which the normalized snapshot carries yet; standard
+fee-tier-to-spacing tables are deliberately not hardcoded, since the domain model
+supports governance-enabled nonstandard tiers.
+
+Nothing consumes any of this yet: no recommendation policy, risk categories, AI,
+API routes or UI.
 
 Shared limits of both adapters:
 
