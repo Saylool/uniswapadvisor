@@ -17,7 +17,11 @@ and neither wired to any route or component yet:
 
 1. **Current pool snapshot** — one Ethereum mainnet Uniswap v3 pool, normalised
    into a `PoolMarketSnapshot`.
-2. **Daily price history** — the previous 31 *completed* UTC days of closing
+2. **Pool metadata** — a pool's fixed configuration: verified token ordering,
+   token `decimals`, symbols and fee tier, normalised into a `V3PoolMetadata`.
+   Read separately because the snapshot does not carry it, and it is what any
+   price/decimal conversion needs first.
+3. **Daily price history** — the previous 31 *completed* UTC days of closing
    prices for one such pool, normalised into a `PoolDailyPriceHistory`. 31 closes
    give 30 daily returns, which is what a 30-day volatility figure needs. The
    current, still-incomplete UTC day is always excluded. Nothing consumes this
@@ -50,10 +54,19 @@ assumption this project does not establish. Zero volatility collapses the band
 onto the current price rather than inventing a minimum width.
 
 Bands are **not yet Uniswap ticks** and are not deployable as positions. Tick
-conversion needs the pool's verified tick spacing, token ordering and token
-decimals, none of which the normalized snapshot carries yet; standard
-fee-tier-to-spacing tables are deliberately not hardcoded, since the domain model
-supports governance-enabled nonstandard tiers.
+conversion needs three verified inputs: token ordering, token decimals, and the
+pool's tick spacing. The metadata adapter now supplies the first two.
+
+**Tick spacing cannot come from a subgraph.** It appears nowhere in the official
+Uniswap v3 subgraph schema — not on `Pool`, not on `Factory`, not in the tokens
+subgraph. Deriving it from the fee tier would mean hardcoding a tier-to-spacing
+table, which this project refuses because governance can enable nonstandard tiers
+with their own spacing. So it is read directly from the pool contract with a
+read-only `eth_call` to `tickSpacing()`, and `fetchEthereumV3Pool` combines that
+with the subgraph metadata into a complete `V3Pool`.
+
+That gives tick conversion all three inputs it needs — token ordering, token
+decimals and tick spacing — but the conversion itself is not written yet.
 
 Nothing consumes any of this yet: no recommendation policy, risk categories, AI,
 API routes or UI.
@@ -79,6 +92,10 @@ npm run dev
 ```
 
 Open http://localhost:3000.
+
+Fonts are self-hosted from `src/app/fonts/` via `next/font/local`, so `next build`
+makes no network request for them and works offline or behind a restrictive
+proxy.
 
 ## Scripts
 
@@ -166,6 +183,11 @@ The v3 market-data reader needs both of:
 | --- | --- |
 | `THE_GRAPH_API_KEY` | Sent only as an `Authorization: Bearer` header, never in a URL or body. |
 | `UNISWAP_V3_ETHEREUM_SUBGRAPH_ID` | The stable **Subgraph ID** from The Graph Explorer — not a deployment/IPFS id. The gateway resolves it to the latest sufficiently synced deployment. |
+| `ETHEREUM_RPC_URL` | Mainnet JSON-RPC endpoint for read-only `eth_call`. **Treat the whole URL as a secret** — most providers embed the key in the path. |
+
+Reads are read-only throughout: the RPC path issues `eth_call` and nothing else.
+There is no signing, no account access, and no transaction capability anywhere in
+the codebase.
 
 With either absent or blank, the reader returns an `unavailable` result with
 reason `configuration-error` and makes no network request.

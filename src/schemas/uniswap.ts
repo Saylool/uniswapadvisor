@@ -233,12 +233,27 @@ const RETURN_DELTA_DEPENDENCIES = [
  * read the discriminator from, so the invariants are layered on afterwards and
  * these raw shapes never leave the module.
  */
-const v3PoolObject = z.strictObject({
+/*
+ * The v3 pool facts a subgraph can actually confirm.
+ *
+ * `tickSpacing` is deliberately absent. No Uniswap subgraph exposes it — not the
+ * `Pool` entity, not `Factory`, not the tokens subgraph — so a metadata read has
+ * no verified value to report. Deriving it from the fee tier would mean shipping
+ * a hardcoded table, which this project refuses because governance can enable
+ * nonstandard tiers with their own spacing. It is read separately, on-chain.
+ */
+const v3PoolMetadataShape = {
   ...v3IdentityShape,
   token0: V3TokenSchema,
   token1: V3TokenSchema,
-  tickSpacing: V3TickSpacingSchema,
   feePpm: V3FeePpmSchema,
+} as const;
+
+const v3PoolMetadataObject = z.strictObject(v3PoolMetadataShape);
+
+const v3PoolObject = z.strictObject({
+  ...v3PoolMetadataShape,
+  tickSpacing: V3TickSpacingSchema,
 });
 
 const v4PoolObject = z.strictObject({
@@ -338,6 +353,18 @@ const withPoolInvariants = <Schema extends z.ZodType<PoolInvariantInput>>(schema
         "A hook's return-delta permission bit requires the matching callback bit to be set as well.",
       path: ["hookAddress"],
     });
+
+/**
+ * Everything about a v3 pool except its tick spacing.
+ *
+ * A distinct type rather than a partial `V3Pool`: it states exactly what a
+ * subgraph read can verify, so nothing downstream can mistake an unread tick
+ * spacing for a missing one. Carries the same token-ordering and chain
+ * invariants, which is what makes it usable for price/decimal work on its own.
+ */
+export const V3PoolMetadataSchema = withPoolInvariants(v3PoolMetadataObject);
+
+export type V3PoolMetadata = z.infer<typeof V3PoolMetadataSchema>;
 
 /**
  * A v3 pool. The fee is fixed for the lifetime of the pool and baked into its own
