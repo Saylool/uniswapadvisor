@@ -52,9 +52,9 @@ not a confidence level: calling `2` a "95% band" would need a distributional
 assumption this project does not establish. Zero volatility collapses the band
 onto the current price rather than inventing a minimum width.
 
-Bands are **not yet Uniswap ticks** and are not deployable as positions. Tick
-conversion needs three verified inputs: token ordering, token decimals, and the
-pool's tick spacing. The metadata adapter now supplies the first two.
+A band is a statement about *prices*, not about ticks. Turning one into position
+boundaries needs three verified inputs: token ordering, token decimals, and the
+pool's tick spacing. The metadata adapter supplies the first two.
 
 **Tick spacing cannot come from a subgraph.** It appears nowhere in the official
 Uniswap v3 subgraph schema — not on `Pool`, not on `Factory`, not in the tokens
@@ -85,11 +85,44 @@ multiple of the spacing when the spacing is 1 — for the 0.30% tier the real fl
 is -887220. A price outside TickMath's range comes back clamped with the bound it
 hit named, so a truncated range can never be mistaken for a requested one.
 
-What is still missing is the composition: nothing yet turns a price band plus a
-`V3Pool` into an aligned tick range.
+On top of both sits the composition: `calculateV3TickRange` takes a price band, a
+`V3Pool` and the snapshot the band was centred on, and produces a **`V3TickRange`**
+— two ticks the pool would accept. Each edge moves *outward* only, so the range
+always covers at least the band it came from; rounding inward would quietly hand
+back a narrower position while still looking like the band's range.
+
+It is still not a position. Nothing here sizes a deposit, quotes an amount of
+either token, or claims the range is a good one.
+
+**The range is checked against the chain's own tick.** The subgraph publishes both
+the pool's `tick` and its price, so converting that price with the metadata
+adapter's decimals must land on that tick. Nothing else in the application can
+tell that a pool's decimals are wrong — every downstream figure stays perfectly
+well-formed — so when the two disagree by more than one tick, no range is
+published at all. A source that reports no tick still produces a range, with a
+warning saying the conversion went unverified.
+
+Three more states are reported rather than smoothed over:
+
+- An edge that runs past what the pool can express is **truncated** to the
+  outermost usable tick and flagged, so a shortened range is never mistaken for
+  the one that was asked for.
+- A band narrower than one tick spacing has no two distinct boundaries. It is
+  refused, not widened — widening would invent a range the band never described,
+  and whether to accept a wider one is a policy decision for a layer that can say
+  so out loud.
+- A current tick outside the resulting range is flagged, because a position built
+  there would hold a single token and earn nothing until price returns.
+
+The `V3TickRange` schema re-derives every price from its tick by direct
+exponentiation, where the calculator works in log space, and pins each boundary to
+exactly one tick by requiring both that it covers the band and that the next tick
+inward does not. A validator that re-ran the calculator's own expression would
+reproduce its bugs and agree with itself.
 
 Nothing consumes any of this yet: no recommendation policy, risk categories, AI,
-API routes or UI.
+API routes or UI. Every reader and calculation above is reachable only from its
+own tests.
 
 Shared limits of both adapters:
 
