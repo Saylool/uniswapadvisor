@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { DataResult, V3PoolMetadata } from "../../schemas";
+import { loggingFetch, logUnavailable } from "../observability/serverDiagnostics";
 import { fetchEthereumV3PoolMetadata } from "./ethereumV3PoolMetadata";
+
+/** Identifies this reader in server-side diagnostics. */
+const LABEL = "v3-pool-metadata";
 
 /*
  * The server-only boundary for pool metadata.
@@ -30,9 +34,12 @@ import { fetchEthereumV3PoolMetadata } from "./ethereumV3PoolMetadata";
 export const getEthereumV3PoolMetadata = async (
   poolAddress: string,
 ): Promise<DataResult<V3PoolMetadata>> =>
-  fetchEthereumV3PoolMetadata({
-    poolAddress,
-    apiKey: process.env.THE_GRAPH_API_KEY,
-    subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
-    fetchImpl: fetch,
-  });
+  logUnavailable(
+    LABEL,
+    await fetchEthereumV3PoolMetadata({
+      poolAddress,
+      apiKey: process.env.THE_GRAPH_API_KEY,
+      subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
+      fetchImpl: loggingFetch(LABEL),
+    }),
+  );

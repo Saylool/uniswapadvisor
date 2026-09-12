@@ -158,7 +158,27 @@ describe("PoolRangeReport", () => {
 
     const partialMarkup = render(result);
     expect(partialMarkup).toContain("Rolling volume is not available from this source.");
-    expect(partialMarkup).toContain("caveat");
+    // Singular and plural are both grammatical; a single template for both is not.
+    expect(partialMarkup).toContain("One caveat applies");
+    expect(partialMarkup).not.toContain("One caveat apply");
+  });
+
+  it("counts caveats in the plural when there is more than one", () => {
+    const result = analysePoolRange({
+      pool: ok(pool()),
+      snapshot: {
+        status: "partial",
+        data: snapshot({ sourceBlockTimestamp: null }),
+        missingFields: ["volume24hUsd"],
+        warnings: ["A fetch caveat."],
+      },
+      history: ok(history()),
+      parameters: DEFAULT_PRICE_BAND_PARAMETERS,
+    });
+    if (result.status !== "partial") throw new Error("fixture should warn");
+
+    expect(render(result)).toContain(`${result.warnings.length} caveats apply`);
+    expect(result.warnings.length).toBeGreaterThan(1);
   });
 
   it("says the conversion is unverified when the source reported no tick", () => {

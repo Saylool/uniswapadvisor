@@ -104,8 +104,8 @@ export function PoolRangeReport({
           className="rounded-lg border border-warning-border bg-warning-surface px-4 py-3 text-sm text-warning-foreground"
         >
           <p className="font-medium">
-            {warnings.length === 1 ? "One caveat" : `${warnings.length} caveats`} apply to these
-            figures.
+            {warnings.length === 1 ? "One caveat applies" : `${warnings.length} caveats apply`} to
+            these figures.
           </p>
           <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
             {warnings.map((warning) => (

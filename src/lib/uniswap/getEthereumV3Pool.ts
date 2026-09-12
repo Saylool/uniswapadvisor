@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { DataResult, V3Pool } from "../../schemas";
+import { loggingFetch, logUnavailable } from "../observability/serverDiagnostics";
 import { fetchEthereumV3Pool } from "./ethereumV3Pool";
+
+/** Identifies this reader in server-side diagnostics. */
+const LABEL = "v3-pool";
 
 /*
  * The server-only boundary for a complete pool description.
@@ -19,10 +23,13 @@ import { fetchEthereumV3Pool } from "./ethereumV3Pool";
  * Environment variables are read per call rather than captured at module load.
  */
 export const getEthereumV3Pool = async (poolAddress: string): Promise<DataResult<V3Pool>> =>
-  fetchEthereumV3Pool({
-    poolAddress,
-    apiKey: process.env.THE_GRAPH_API_KEY,
-    subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
-    rpcUrl: process.env.ETHEREUM_RPC_URL,
-    fetchImpl: fetch,
-  });
+  logUnavailable(
+    LABEL,
+    await fetchEthereumV3Pool({
+      poolAddress,
+      apiKey: process.env.THE_GRAPH_API_KEY,
+      subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
+      rpcUrl: process.env.ETHEREUM_RPC_URL,
+      fetchImpl: loggingFetch(LABEL),
+    }),
+  );

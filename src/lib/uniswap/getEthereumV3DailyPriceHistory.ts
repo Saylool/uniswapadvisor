@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { DataResult, PoolDailyPriceHistory } from "../../schemas";
+import { loggingFetch, logUnavailable } from "../observability/serverDiagnostics";
 import { fetchEthereumV3DailyPriceHistory } from "./ethereumV3DailyPriceHistory";
+
+/** Identifies this reader in server-side diagnostics. */
+const LABEL = "v3-daily-history";
 
 /*
  * The server-only boundary for daily price history.
@@ -29,10 +33,13 @@ import { fetchEthereumV3DailyPriceHistory } from "./ethereumV3DailyPriceHistory"
 export const getEthereumV3DailyPriceHistory = async (
   poolAddress: string,
 ): Promise<DataResult<PoolDailyPriceHistory>> =>
-  fetchEthereumV3DailyPriceHistory({
-    poolAddress,
-    apiKey: process.env.THE_GRAPH_API_KEY,
-    subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
-    fetchImpl: fetch,
-    now: () => new Date(),
-  });
+  logUnavailable(
+    LABEL,
+    await fetchEthereumV3DailyPriceHistory({
+      poolAddress,
+      apiKey: process.env.THE_GRAPH_API_KEY,
+      subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
+      fetchImpl: loggingFetch(LABEL),
+      now: () => new Date(),
+    }),
+  );

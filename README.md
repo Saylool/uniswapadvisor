@@ -211,6 +211,7 @@ user input
 | `src/lib/analytics`   | Deterministic, dependency-free calculations: volatility, ranges, ratios.    |
 | `src/lib/advisor`     | Composition: the pure pipeline from fetched data to a tick range, plus its server-only wrapper. |
 | `src/lib/format`      | Deterministic display formatting. Locale-pinned so server-rendered output cannot vary by host. |
+| `src/lib/observability` | Server-side diagnostics for failed reads. Records status codes, never URLs or headers. |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
 | `src/schemas`         | The normalized domain contracts: Zod schemas plus the types inferred from them. |
@@ -226,6 +227,13 @@ user input
 - Every data-fetching module returns `DataResult<T>`, which distinguishes
   success, partial and unavailable. Missing financial metrics are `null`;
   `0` means a source reported zero.
+- A failure message meant for a user never carries a credential, a URL containing
+  one, a stack trace or a raw provider payload. The technical detail goes to a
+  server-side log instead (`src/lib/observability`), which records an HTTP status,
+  an elapsed time, a thrown error's *name* and the failure category — and never
+  the request URL or its headers, because the RPC URL embeds its key in the path
+  and the Graph key rides in an `Authorization` header. Tests assert those absences
+  directly rather than trusting the code to have left them out.
 - Fetch time and source freshness are separate fields. `fetchedAt` records when a
   response arrived; `sourceBlockNumber` / `sourceBlockTimestamp` record what it
   describes. A lagging indexer must never look fresh, so fetch time is never

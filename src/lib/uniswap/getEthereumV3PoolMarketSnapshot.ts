@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { DataResult, PoolMarketSnapshot } from "../../schemas";
+import { loggingFetch, logUnavailable } from "../observability/serverDiagnostics";
 import { fetchEthereumV3PoolMarketSnapshot } from "./ethereumV3PoolMarketSnapshot";
+
+/** Identifies this reader in server-side diagnostics. */
+const LABEL = "v3-snapshot";
 
 /*
  * The server-only boundary.
@@ -29,10 +33,13 @@ import { fetchEthereumV3PoolMarketSnapshot } from "./ethereumV3PoolMarketSnapsho
 export const getEthereumV3PoolMarketSnapshot = async (
   poolAddress: string,
 ): Promise<DataResult<PoolMarketSnapshot>> =>
-  fetchEthereumV3PoolMarketSnapshot({
-    poolAddress,
-    apiKey: process.env.THE_GRAPH_API_KEY,
-    subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
-    fetchImpl: fetch,
-    now: () => new Date(),
-  });
+  logUnavailable(
+    LABEL,
+    await fetchEthereumV3PoolMarketSnapshot({
+      poolAddress,
+      apiKey: process.env.THE_GRAPH_API_KEY,
+      subgraphId: process.env.UNISWAP_V3_ETHEREUM_SUBGRAPH_ID,
+      fetchImpl: loggingFetch(LABEL),
+      now: () => new Date(),
+    }),
+  );

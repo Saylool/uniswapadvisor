@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { DataResult } from "../../schemas";
+import { loggingFetch, logUnavailable } from "../observability/serverDiagnostics";
 import { fetchEthereumV3TickSpacing } from "./ethereumV3TickSpacing";
+
+/** Identifies this reader in server-side diagnostics. */
+const LABEL = "v3-tick-spacing";
 
 /*
  * The server-only boundary for on-chain reads.
@@ -23,8 +27,11 @@ import { fetchEthereumV3TickSpacing } from "./ethereumV3TickSpacing";
 export const getEthereumV3TickSpacing = async (
   poolAddress: string,
 ): Promise<DataResult<number>> =>
-  fetchEthereumV3TickSpacing({
-    poolAddress,
-    rpcUrl: process.env.ETHEREUM_RPC_URL,
-    fetchImpl: fetch,
-  });
+  logUnavailable(
+    LABEL,
+    await fetchEthereumV3TickSpacing({
+      poolAddress,
+      rpcUrl: process.env.ETHEREUM_RPC_URL,
+      fetchImpl: loggingFetch(LABEL),
+    }),
+  );
