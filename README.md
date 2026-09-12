@@ -134,6 +134,25 @@ distinguishable outcomes rather than one blank screen.
 memory which contract a pair lives at, and an address this application cannot
 verify has no place in its UI.
 
+`/pool` is rate limited, because every analysed pool costs four upstream calls —
+three subgraph queries and one `eth_call` — and the page is public. `src/proxy.ts`
+allows **10 analyses per minute per client** and answers the rest with a real
+`429` and a `Retry-After`, before rendering begins. Only a request carrying a
+well-formed address is counted: a missing or malformed one is answered without a
+single upstream call, so a typo never costs an analysis.
+
+Two limits of that, stated rather than papered over:
+
+- **The count lives in one process's memory.** A platform running several
+  instances multiplies the effective limit by however many are warm. This is a
+  deterrent against casual abuse, not a hard ceiling; a hard ceiling needs a store
+  the instances share.
+- **A caller is identified by proxy-set headers** (`x-real-ip`, then the leftmost
+  `x-forwarded-for`). That is trustworthy behind a proxy that writes them itself,
+  as Vercel does, and worthless anywhere a client's own headers pass through
+  untouched. Running locally neither header exists and every request shares one
+  bucket — the safe direction to fail.
+
 Still absent: no recommendation policy, no risk categories, no AI, no persistence
 and no wallet connection.
 
@@ -212,6 +231,7 @@ user input
 | `src/lib/advisor`     | Composition: the pure pipeline from fetched data to a tick range, plus its server-only wrapper. |
 | `src/lib/format`      | Deterministic display formatting. Locale-pinned so server-rendered output cannot vary by host. |
 | `src/lib/observability` | Server-side diagnostics for failed reads. Records status codes, never URLs or headers. |
+| `src/lib/ratelimit`   | Fixed-window request counter and the client key it counts against. Pure; the clock is injected. |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
 | `src/schemas`         | The normalized domain contracts: Zod schemas plus the types inferred from them. |
