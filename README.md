@@ -120,9 +120,22 @@ exactly one tick by requiring both that it covers the band and that the next tic
 inward does not. A validator that re-ran the calculator's own expression would
 reproduce its bugs and agree with itself.
 
-Nothing consumes any of this yet: no recommendation policy, risk categories, AI,
-API routes or UI. Every reader and calculation above is reachable only from its
-own tests.
+All of it is now wired into one page. `/pool` takes a pool address, runs the three
+reads concurrently, and works them through volatility, band and range to a pair of
+ticks. It is a Server Component, so the credentials the readers need never enter a
+browser bundle, and the address arrives as a search parameter rather than a path
+segment so the form that submits it can be plain HTML with no client JavaScript.
+
+The pipeline reports **which stage** stopped when one does, so a pool with two days
+of history, a pool behind an unreachable subgraph, and a missing API key are three
+distinguishable outcomes rather than one blank screen.
+
+**No pool address is hardcoded anywhere.** Shipping one would mean asserting from
+memory which contract a pair lives at, and an address this application cannot
+verify has no place in its UI.
+
+Still absent: no recommendation policy, no risk categories, no AI, no persistence
+and no wallet connection.
 
 Shared limits of both adapters:
 
@@ -140,11 +153,17 @@ Shared limits of both adapters:
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in values as integrations land
+cp .env.example .env.local   # fill in the three values below
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000, then follow **Analyse a pool** to `/pool` and paste an
+Ethereum mainnet Uniswap v3 pool address — the pool contract's own address, not a
+token's.
+
+Without `.env.local` filled in, the page still renders: it reports a
+`configuration-error` for the stage that needed a credential and makes no network
+request.
 
 Fonts are self-hosted from `src/app/fonts/` via `next/font/local`, so `next build`
 makes no network request for them and works offline or behind a restrictive
@@ -190,6 +209,8 @@ user input
 | `src/components`      | Presentational React components. No data fetching, no secrets.              |
 | `src/lib/uniswap`     | One isolated service module per external source (v3 subgraph, v4 subgraph, JSON-RPC), plus pure Uniswap protocol math such as tick conversion. |
 | `src/lib/analytics`   | Deterministic, dependency-free calculations: volatility, ranges, ratios.    |
+| `src/lib/advisor`     | Composition: the pure pipeline from fetched data to a tick range, plus its server-only wrapper. |
+| `src/lib/format`      | Deterministic display formatting. Locale-pinned so server-rendered output cannot vary by host. |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
 | `src/schemas`         | The normalized domain contracts: Zod schemas plus the types inferred from them. |
@@ -230,7 +251,7 @@ user input
 All credentials are server-side. See `.env.example`. Never prefix a credential
 with `NEXT_PUBLIC_` — that inlines it into the client bundle.
 
-The v3 market-data reader needs both of:
+The v3 market-data readers need all three of:
 
 | Variable | Purpose |
 | --- | --- |
@@ -242,5 +263,6 @@ Reads are read-only throughout: the RPC path issues `eth_call` and nothing else.
 There is no signing, no account access, and no transaction capability anywhere in
 the codebase.
 
-With either absent or blank, the reader returns an `unavailable` result with
-reason `configuration-error` and makes no network request.
+With any of them absent or blank, the reader that needs it returns an
+`unavailable` result with reason `configuration-error` and makes no network
+request — so the page reports a configuration problem rather than a data one.

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { EducationalDisclaimer } from "@/components/EducationalDisclaimer";
 
 /**
@@ -88,6 +90,25 @@ export default function Home() {
 
       <EducationalDisclaimer />
 
+      <section className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
+          Working today
+        </h2>
+        <p className="text-sm leading-relaxed">
+          The deterministic half of the pipeline runs end to end: a pool&rsquo;s verified
+          configuration and current market state, its last 30 completed days of closing prices,
+          historical volatility, a log-symmetric price band, and the Uniswap tick range that band
+          aligns onto. No AI is involved in any of those figures, and none of them is estimated to
+          fill a gap.
+        </p>
+        <Link
+          href="/pool"
+          className="w-fit rounded-md border border-border bg-background px-4 py-2 text-sm font-medium"
+        >
+          Analyse a pool →
+        </Link>
+      </section>
+
       <section className="flex flex-col gap-6">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
           How it will work
@@ -135,9 +156,11 @@ export default function Home() {
 
       <footer className="mt-auto border-t border-border pt-6 text-sm leading-relaxed text-muted">
         <p>
-          Nothing above is live yet: this build is the project foundation, with
-          no market data, no AI analysis and no wallet connection. The advisor
-          produces recommendations only — it will never sign or send a
+          The planned coverage above is not built yet: there is no AI
+          interpretation, no persistence and no wallet connection. What works
+          today is the verified-data and deterministic-maths half, which the
+          advisor is built on so that nothing further up can invent a figure. The
+          advisor produces recommendations only — it will never sign or send a
           transaction on your behalf.
         </p>
       </footer>
