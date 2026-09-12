@@ -3,6 +3,7 @@ import type {
   PoolRangeAnalysisStep,
 } from "../lib/advisor/poolRangeAnalysis";
 import {
+  ABSENT,
   formatFeePpm,
   formatPercent,
   formatPrice,
@@ -12,6 +13,8 @@ import {
   formatUtcMinute,
   formatWhole,
 } from "../lib/format/displayFormats";
+import type { Dictionary } from "../lib/i18n/dictionaries";
+import type { Locale } from "../lib/i18n/locales";
 
 /**
  * Renders one pool's tick-range analysis.
@@ -19,17 +22,15 @@ import {
  * Presentational only: it fetches nothing, computes nothing, and holds no
  * credential. Every figure comes from the result it is handed, and every figure
  * it cannot show is shown as absent rather than as a zero.
+ *
+ * Both the words and the numbers follow the reader's language — a translated
+ * page that still writes "0.30%" to a Turkish reader is only half translated.
+ *
+ * The warnings are the exception. They arrive from the data layer as fixed
+ * sentences and are rendered as they come, in English, because making them
+ * translatable means turning them into codes down there rather than text up
+ * here.
  */
-
-/** Says which stage stopped, in the reader's terms rather than the pipeline's. */
-const STEP_LABELS: Record<PoolRangeAnalysisStep, string> = {
-  pool: "reading the pool's configuration",
-  snapshot: "reading the pool's current market state",
-  history: "reading the pool's daily price history",
-  volatility: "measuring historical volatility",
-  band: "building the price band",
-  range: "aligning the band onto the pool's tick grid",
-};
 
 function Figure({
   label,
@@ -61,19 +62,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function PoolRangeReport({
   result,
   poolAddress,
+  t,
+  locale,
 }: {
   result: PoolRangeAnalysisResult;
   poolAddress: string;
+  t: Dictionary;
+  locale: Locale;
 }) {
   if (result.status === "unavailable") {
+    const step: PoolRangeAnalysisStep = result.step;
+
     return (
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          No range for this pool
+          {t.report.noRangeHeading}
         </h2>
-        <p className="text-sm leading-relaxed">
-          This stopped while {STEP_LABELS[result.step]}.
-        </p>
+        <p className="text-sm leading-relaxed">{t.report.stoppedWhile(t.report.steps[step])}</p>
         <p className="text-sm leading-relaxed text-muted">{result.message}</p>
         <p className="font-mono text-xs text-muted">
           {poolAddress} · {result.reason}
@@ -85,28 +90,30 @@ export function PoolRangeReport({
   const { pool, snapshot, volatility, band, range, parameters } = result.data;
   const warnings = result.status === "partial" ? result.warnings : [];
 
+  const base = pool.token0.symbol;
+  const quote = pool.token1.symbol;
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">
-          {pool.token0.symbol} / {pool.token1.symbol}
+          {base} / {quote}
         </h1>
         <p className="font-mono text-xs text-muted">{pool.id}</p>
         <p className="text-sm leading-relaxed text-muted">
-          Uniswap v3 on Ethereum mainnet · {formatFeePpm(pool.feePpm)} fee tier · tick spacing{" "}
-          {formatWhole(pool.tickSpacing)}
+          {t.report.poolSummary(
+            formatFeePpm(pool.feePpm, locale),
+            formatWhole(pool.tickSpacing, locale),
+          )}
         </p>
       </header>
 
       {warnings.length === 0 ? null : (
         <aside
-          aria-label="Caveats"
+          aria-label={t.report.caveatsAriaLabel}
           className="rounded-lg border border-warning-border bg-warning-surface px-4 py-3 text-sm text-warning-foreground"
         >
-          <p className="font-medium">
-            {warnings.length === 1 ? "One caveat applies" : `${warnings.length} caveats apply`} to
-            these figures.
-          </p>
+          <p className="font-medium">{t.report.caveatsHeading(warnings.length)}</p>
           <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
             {warnings.map((warning) => (
               <li key={warning} className="leading-relaxed">
@@ -117,131 +124,122 @@ export function PoolRangeReport({
         </aside>
       )}
 
-      <Section title="Suggested tick range">
+      <Section title={t.report.rangeHeading}>
         <Figure
-          label="Lower tick"
-          value={formatTick(range.lowerTick)}
-          note={`Price ${formatPrice(range.lowerPrice)} ${pool.token1.symbol} per ${pool.token0.symbol}`}
+          label={t.report.lowerTick}
+          value={formatTick(range.lowerTick, locale)}
+          note={t.report.priceAt(formatPrice(range.lowerPrice, locale), quote, base)}
         />
         <Figure
-          label="Upper tick"
-          value={formatTick(range.upperTick)}
-          note={`Price ${formatPrice(range.upperPrice)} ${pool.token1.symbol} per ${pool.token0.symbol}`}
+          label={t.report.upperTick}
+          value={formatTick(range.upperTick, locale)}
+          note={t.report.priceAt(formatPrice(range.upperPrice, locale), quote, base)}
         />
         <Figure
-          label="Width"
-          value={`${formatWhole(range.upperTick - range.lowerTick)} ticks`}
-          note={`${formatWhole((range.upperTick - range.lowerTick) / pool.tickSpacing)} spacings of ${formatWhole(pool.tickSpacing)}`}
+          label={t.report.width}
+          value={t.report.widthValue(formatWhole(range.upperTick - range.lowerTick, locale))}
+          note={t.report.widthNote(
+            formatWhole((range.upperTick - range.lowerTick) / pool.tickSpacing, locale),
+            formatWhole(pool.tickSpacing, locale),
+          )}
         />
         <Figure
-          label="Currently in range"
-          value={range.containsCurrentPrice ? "Yes" : "No"}
-          note={
-            range.containsCurrentPrice
-              ? "The pool's current tick sits inside these bounds."
-              : "A position here would hold a single token and earn nothing until price returns."
-          }
+          label={t.report.inRange}
+          value={range.containsCurrentPrice ? t.report.yes : t.report.no}
+          note={range.containsCurrentPrice ? t.report.inRangeNote : t.report.outOfRangeNote}
         />
         <Figure
-          label="Lower edge"
-          value={range.lowerBoundTruncated ? "Truncated" : "As asked"}
-          {...(range.lowerBoundTruncated
-            ? { note: "Stopped at the lowest tick this pool accepts." }
-            : {})}
+          label={t.report.lowerEdge}
+          value={range.lowerBoundTruncated ? t.report.truncated : t.report.asAsked}
+          {...(range.lowerBoundTruncated ? { note: t.report.lowerTruncatedNote } : {})}
         />
         <Figure
-          label="Upper edge"
-          value={range.upperBoundTruncated ? "Truncated" : "As asked"}
-          {...(range.upperBoundTruncated
-            ? { note: "Stopped at the highest tick this pool accepts." }
-            : {})}
+          label={t.report.upperEdge}
+          value={range.upperBoundTruncated ? t.report.truncated : t.report.asAsked}
+          {...(range.upperBoundTruncated ? { note: t.report.upperTruncatedNote } : {})}
         />
       </Section>
 
-      <Section title="Current state">
+      <Section title={t.report.currentStateHeading}>
         <Figure
-          label={`${pool.token0.symbol} price`}
-          value={formatPrice(band.currentPrice)}
-          note={`${pool.token1.symbol} per ${pool.token0.symbol}`}
+          label={t.report.tokenPrice(base)}
+          value={formatPrice(band.currentPrice, locale)}
+          note={t.report.quotePerBase(quote, base)}
         />
         <Figure
-          label="Current tick"
-          value={formatTick(range.currentTick)}
+          label={t.report.currentTick}
+          value={formatTick(range.currentTick, locale)}
           note={
             range.chainReportedTick === null
-              ? "The source reported no tick of its own, so this conversion is unverified."
-              : `Source reported ${formatTick(range.chainReportedTick)}.`
+              ? t.report.noSourceTick
+              : t.report.sourceReportedTick(formatTick(range.chainReportedTick, locale))
           }
         />
-        <Figure label="Total value locked" value={formatUsd(snapshot.tvlUsd)} />
+        <Figure label={t.report.tvl} value={formatUsd(snapshot.tvlUsd, locale)} />
         <Figure
-          label="Source block"
-          value={snapshot.sourceBlockNumber ?? "—"}
+          label={t.report.sourceBlock}
+          value={snapshot.sourceBlockNumber ?? ABSENT}
           note={
             snapshot.sourceBlockTimestamp === null
-              ? "No block time reported."
+              ? t.report.noBlockTime
               : formatUtcMinute(snapshot.sourceBlockTimestamp)
           }
         />
         <Figure
-          label="Fetched at"
+          label={t.report.fetchedAt}
           value={formatUtcMinute(snapshot.fetchedAt)}
-          note="When the response arrived, not what it describes."
+          note={t.report.fetchedAtNote}
         />
       </Section>
 
-      <Section title="Historical volatility">
+      <Section title={t.report.volatilityHeading}>
         <Figure
-          label="Annualised"
-          value={formatPercent(volatility.annualizedVolatility)}
-          note="Sample standard deviation of daily log returns, scaled by sqrt(365)."
+          label={t.report.annualised}
+          value={formatPercent(volatility.annualizedVolatility, locale)}
+          note={t.report.annualisedNote}
         />
-        <Figure label="Daily" value={formatPercent(volatility.dailyVolatility)} />
         <Figure
-          label="Window"
+          label={t.report.daily}
+          value={formatPercent(volatility.dailyVolatility, locale)}
+        />
+        <Figure
+          label={t.report.window}
           value={`${formatUtcDate(volatility.rangeStart)} → ${formatUtcDate(volatility.rangeEndExclusive)}`}
-          note={`${formatWhole(volatility.usableReturnCount)} usable daily returns.`}
+          note={t.report.windowNote(formatWhole(volatility.usableReturnCount, locale))}
         />
         <Figure
-          label="Coverage"
-          value={formatPercent(volatility.returnCoverageRatio)}
-          note="How much of the window had consecutive daily prices behind it."
+          label={t.report.coverage}
+          value={formatPercent(volatility.returnCoverageRatio, locale)}
+          note={t.report.coverageNote}
         />
       </Section>
 
-      <Section title="Price band this range came from">
+      <Section title={t.report.bandHeading}>
         <Figure
-          label="Horizon"
-          value={`${formatWhole(parameters.horizonDays)} days`}
-          note="How far ahead the band is scaled."
+          label={t.report.horizon}
+          value={t.report.horizonValue(formatWhole(parameters.horizonDays, locale))}
+          note={t.report.horizonNote}
         />
         <Figure
-          label="Multiplier"
-          value={`${parameters.standardDeviationMultiplier}σ`}
-          note="Horizon standard deviations, not a confidence level."
+          label={t.report.multiplier}
+          value={`${formatWhole(parameters.standardDeviationMultiplier, locale)}σ`}
+          note={t.report.multiplierNote}
         />
-        <Figure label="Lower bound" value={formatPrice(band.lowerPrice)} />
-        <Figure label="Upper bound" value={formatPrice(band.upperPrice)} />
+        <Figure label={t.report.lowerBound} value={formatPrice(band.lowerPrice, locale)} />
+        <Figure label={t.report.upperBound} value={formatPrice(band.upperPrice, locale)} />
         <Figure
-          label="Downside"
-          value={formatPercent(band.downsideDistanceRatio)}
-          note="Distance from the current price to the lower bound."
+          label={t.report.downside}
+          value={formatPercent(band.downsideDistanceRatio, locale)}
+          note={t.report.downsideNote}
         />
         <Figure
-          label="Upside"
-          value={formatPercent(band.upsideDistanceRatio)}
-          note="Distance from the current price to the upper bound."
+          label={t.report.upside}
+          value={formatPercent(band.upsideDistanceRatio, locale)}
+          note={t.report.upsideNote}
         />
       </Section>
 
-      <p className="text-sm leading-relaxed text-muted">
-        The band is symmetric in log space, which makes it deliberately asymmetric in percentage
-        terms: a move down to half price and a move up to double price are the same distance in
-        logs, and only one of them is &ldquo;50%&rdquo;. It assumes no expected return, describes
-        how far price has moved historically, and is not a forecast. The multiplier is not a
-        confidence level. Nothing here sizes a position or says how much of either token to
-        deposit.
-      </p>
+      <p className="text-sm leading-relaxed text-muted">{t.report.epilogue}</p>
     </div>
   );
 }

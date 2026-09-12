@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getDictionary } from "./lib/i18n/dictionaries";
+import { LOCALE_COOKIE, type Locale, resolveLocale } from "./lib/i18n/locales";
 import { clientKeyFromHeaders } from "./lib/ratelimit/clientKey";
 import {
   POOL_ANALYSIS_REQUEST_LIMIT,
@@ -38,14 +40,17 @@ export const config = {
  *
  * Deliberately self-contained rather than reusing the application's layout: at
  * this point the goal is to spend nothing, and rendering the real page is the
- * cost being avoided. Only a number is interpolated.
+ * cost being avoided. Only a number reaches the markup.
+ *
+ * It still speaks the reader's language, because being turned away is exactly
+ * the moment an explanation has to land.
  */
-const tooManyRequestsPage = (retryAfterSeconds: number): string => `<!doctype html>
-<html lang="en">
+const tooManyRequestsPage = (retryAfterSeconds: number, locale: Locale): string => `<!doctype html>
+<html lang="${locale}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Too many requests</title>
+    <title>${getDictionary(locale).rateLimited.title}</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -60,13 +65,10 @@ const tooManyRequestsPage = (retryAfterSeconds: number): string => `<!doctype ht
   </head>
   <body>
     <main>
-      <h1>Too many requests</h1>
-      <p>
-        This page reads live Uniswap data on every visit, so it is limited to
-        ${POOL_ANALYSIS_REQUEST_LIMIT} analyses per minute.
-      </p>
-      <p>Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"}.</p>
-      <p><a href="/">Back to the advisor</a></p>
+      <h1>${getDictionary(locale).rateLimited.title}</h1>
+      <p>${getDictionary(locale).rateLimited.body(POOL_ANALYSIS_REQUEST_LIMIT)}</p>
+      <p>${getDictionary(locale).rateLimited.retry(retryAfterSeconds)}</p>
+      <p><a href="/">${getDictionary(locale).rateLimited.back}</a></p>
     </main>
   </body>
 </html>
@@ -87,7 +89,12 @@ export function proxy(request: NextRequest): NextResponse {
   const decision = poolAnalysisRateLimiter.check(clientKeyFromHeaders(request.headers));
   if (decision.allowed) return NextResponse.next();
 
-  return new NextResponse(tooManyRequestsPage(decision.retryAfterSeconds), {
+  const locale = resolveLocale({
+    cookieValue: request.cookies.get(LOCALE_COOKIE)?.value,
+    acceptLanguage: request.headers.get("accept-language"),
+  });
+
+  return new NextResponse(tooManyRequestsPage(decision.retryAfterSeconds, locale), {
     status: 429,
     headers: {
       "Retry-After": String(decision.retryAfterSeconds),

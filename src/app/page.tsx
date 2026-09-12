@@ -1,131 +1,57 @@
 import Link from "next/link";
 
 import { EducationalDisclaimer } from "@/components/EducationalDisclaimer";
+import { PreferenceBar } from "@/components/PreferenceBar";
+import { getRequestDictionary } from "@/lib/i18n/requestLocale";
 
-/**
- * Scope shown on the landing page. These are the features the advisor is being
- * built to cover — none of them are implemented yet, so the UI labels them as
- * planned rather than available.
- */
-const PLANNED_COVERAGE = [
-  {
-    version: "Uniswap v3",
-    features: [
-      {
-        name: "Concentrated liquidity",
-        summary:
-          "Choosing a price range that matches how much of the time you want your capital earning fees.",
-      },
-      {
-        name: "Fee tier selection",
-        summary:
-          "Comparing the available fee tiers for a pair against how that pair actually trades.",
-      },
-      {
-        name: "Range orders",
-        summary:
-          "Using a one-sided position to convert between two tokens as price moves through a band.",
-      },
-    ],
-  },
-  {
-    version: "Uniswap v4",
-    features: [
-      {
-        name: "Hook discovery",
-        summary:
-          "Finding published hooks relevant to a goal, with their limitations stated plainly.",
-      },
-      {
-        name: "Dynamic fee hooks",
-        summary:
-          "Understanding when a fee that responds to market conditions is worth the added complexity.",
-      },
-      {
-        name: "TWAMM-style strategies",
-        summary:
-          "Spreading a large order over time instead of executing it against a single point of liquidity.",
-      },
-    ],
-  },
-] as const;
+export default async function Home() {
+  const { locale, t } = await getRequestDictionary();
 
-const METHOD_STEPS = [
-  {
-    step: "Verified data",
-    detail:
-      "Pool statistics are fetched from Uniswap subgraphs and public registries, never assumed.",
-  },
-  {
-    step: "Deterministic maths",
-    detail:
-      "Volatility, ranges and liquidity metrics are computed in plain TypeScript, so the numbers are reproducible.",
-  },
-  {
-    step: "AI interpretation",
-    detail:
-      "The model explains what those figures mean for your goal. It is not allowed to invent them.",
-  },
-] as const;
-
-export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-12 px-6 py-16 sm:py-24">
+      <PreferenceBar locale={locale} t={t} />
+
       <header className="flex flex-col gap-4">
         <span className="w-fit rounded-full border border-border px-3 py-1 font-mono text-xs uppercase tracking-widest text-muted">
-          Early foundation
+          {t.home.badge}
         </span>
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-          Uniswap Strategy Advisor
-        </h1>
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{t.home.title}</h1>
         <p className="max-w-2xl text-lg leading-relaxed text-muted">
-          An AI-powered advisor for Uniswap{" "}
-          <span className="text-accent">v3</span> and{" "}
-          <span className="text-accent">v4</span>. Describe what you are trying
-          to do in ordinary language, and get an explanation of the features and
-          parameters involved — without needing to know the low-level mechanics
-          first.
+          {t.home.introBeforeV3}
+          <span className="text-accent">v3</span>
+          {t.home.introBetween}
+          <span className="text-accent">v4</span>
+          {t.home.introAfterV4}
         </p>
       </header>
 
-      <EducationalDisclaimer />
+      <EducationalDisclaimer t={t} />
 
       <section className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Working today
+          {t.home.workingTodayHeading}
         </h2>
-        <p className="text-sm leading-relaxed">
-          The deterministic half of the pipeline runs end to end: a pool&rsquo;s verified
-          configuration and current market state, its last 30 completed days of closing prices,
-          historical volatility, a log-symmetric price band, and the Uniswap tick range that band
-          aligns onto. No AI is involved in any of those figures, and none of them is estimated to
-          fill a gap.
-        </p>
+        <p className="text-sm leading-relaxed">{t.home.workingTodayBody}</p>
         <Link
           href="/pool"
           className="w-fit rounded-md border border-border bg-background px-4 py-2 text-sm font-medium"
         >
-          Analyse a pool →
+          {t.home.analysePool}
         </Link>
       </section>
 
       <section className="flex flex-col gap-6">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          How it will work
+          {t.home.methodHeading}
         </h2>
         <ol className="flex flex-col gap-4 sm:flex-row">
-          {METHOD_STEPS.map(({ step, detail }, index) => (
-            <li
-              key={step}
-              className="flex-1 rounded-lg border border-border bg-surface p-4"
-            >
+          {t.home.methodSteps.map(({ step, detail }, index) => (
+            <li key={step} className="flex-1 rounded-lg border border-border bg-surface p-4">
               <p className="font-mono text-xs text-accent">
                 {String(index + 1).padStart(2, "0")}
               </p>
               <p className="mt-2 font-medium">{step}</p>
-              <p className="mt-1 text-sm leading-relaxed text-muted">
-                {detail}
-              </p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">{detail}</p>
             </li>
           ))}
         </ol>
@@ -133,19 +59,17 @@ export default function Home() {
 
       <section className="flex flex-col gap-6">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Planned coverage
+          {t.home.coverageHeading}
         </h2>
         <div className="grid gap-8 sm:grid-cols-2">
-          {PLANNED_COVERAGE.map(({ version, features }) => (
+          {t.home.coverage.map(({ version, features }) => (
             <div key={version} className="flex flex-col gap-4">
               <h3 className="font-medium">{version}</h3>
               <ul className="flex flex-col gap-4">
                 {features.map(({ name, summary }) => (
                   <li key={name} className="border-l-2 border-border pl-4">
                     <p className="text-sm font-medium">{name}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-muted">
-                      {summary}
-                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted">{summary}</p>
                   </li>
                 ))}
               </ul>
@@ -155,14 +79,7 @@ export default function Home() {
       </section>
 
       <footer className="mt-auto border-t border-border pt-6 text-sm leading-relaxed text-muted">
-        <p>
-          The planned coverage above is not built yet: there is no AI
-          interpretation, no persistence and no wallet connection. What works
-          today is the verified-data and deterministic-maths half, which the
-          advisor is built on so that nothing further up can invent a figure. The
-          advisor produces recommendations only — it will never sign or send a
-          transaction on your behalf.
-        </p>
+        <p>{t.home.footer}</p>
       </footer>
     </main>
   );

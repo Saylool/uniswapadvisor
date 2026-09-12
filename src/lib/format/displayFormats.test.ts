@@ -128,6 +128,43 @@ describe("formatUsd", () => {
   });
 });
 
+describe("the reader's own language", () => {
+  /*
+   * Translating the words and leaving the numbers in English would be half a
+   * translation: a Turkish reader writes the decimal separator as a comma, the
+   * thousands separator as a dot, and the percent sign before the number.
+   */
+  it("writes a price with a comma for the decimal separator", () => {
+    expect(formatPrice(1 / 3000, "tr")).toBe("0,000333333");
+    expect(formatPrice(1 / 3000, "en")).toBe("0.000333333");
+  });
+
+  it("groups thousands with a dot", () => {
+    expect(formatWhole(1_234_567, "tr")).toBe("1.234.567");
+    expect(formatTick(-276_325, "tr")).toBe("-276.325");
+  });
+
+  it("puts the percent sign where Turkish puts it", () => {
+    expect(formatPercent(0.0545, "tr")).toBe("%5,45");
+    expect(formatFeePpm(3000, "tr")).toBe("%0,30");
+  });
+
+  it("formats a USD figure in the reader's conventions", () => {
+    expect(formatUsd(12_500_000, "tr")).toBe("$12.500.000");
+    expect(formatUsd(12.5, "tr")).toBe("$12,50");
+  });
+
+  it("defaults to English, so a bare call never follows the host's locale", () => {
+    expect(formatPercent(0.0545)).toBe(formatPercent(0.0545, "en"));
+    expect(formatWhole(1_234_567)).toBe("1,234,567");
+  });
+
+  it("still reports an absent figure the same way in both", () => {
+    expect(formatUsd(null, "tr")).toBe(ABSENT);
+    expect(formatPrice(Number.NaN, "tr")).toBe(ABSENT);
+  });
+});
+
 describe("formatUtcMinute / formatUtcDate", () => {
   it("states the zone rather than leaving the reader to assume theirs", () => {
     expect(formatUtcMinute("2026-08-21T09:15:00.000Z")).toBe("2026-08-21 09:15 UTC");

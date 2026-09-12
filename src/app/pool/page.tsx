@@ -3,8 +3,12 @@ import Link from "next/link";
 
 import { EducationalDisclaimer } from "@/components/EducationalDisclaimer";
 import { PoolRangeReport } from "@/components/PoolRangeReport";
+import { PreferenceBar } from "@/components/PreferenceBar";
 import { getPoolRangeAnalysis } from "@/lib/advisor/getPoolRangeAnalysis";
-import { EvmAddressSchema } from "@/schemas";
+import type { Dictionary } from "@/lib/i18n/dictionaries";
+import type { Locale } from "@/lib/i18n/locales";
+import { getRequestDictionary } from "@/lib/i18n/requestLocale";
+import { EvmAddressSchema } from "@/schemas/primitives";
 
 /*
  * The first surface that runs the whole pipeline against live data.
@@ -19,31 +23,43 @@ import { EvmAddressSchema } from "@/schemas";
  * verify has no place in its UI.
  */
 
-export const metadata: Metadata = {
-  title: "Pool range analysis · Uniswap Strategy Advisor",
-  description:
-    "Historical-volatility price band for one Ethereum mainnet Uniswap v3 pool, aligned onto the pool's tick grid.",
-  /*
-   * Every render of this page spends third-party API quota, and the result is
-   * only meaningful for the moment it was fetched. Neither property suits a
-   * search index.
-   */
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getRequestDictionary();
 
-function Shell({ children }: { children: React.ReactNode }) {
+  return {
+    title: t.metadata.poolTitle,
+    description: t.metadata.poolDescription,
+    /*
+     * Every render of this page spends third-party API quota, and the result is
+     * only meaningful for the moment it was fetched. Neither property suits a
+     * search index.
+     */
+    robots: { index: false, follow: false },
+  };
+}
+
+function Shell({
+  locale,
+  t,
+  children,
+}: {
+  locale: Locale;
+  t: Dictionary;
+  children: React.ReactNode;
+}) {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-12 sm:py-16">
+      <PreferenceBar locale={locale} t={t} />
       <Link href="/" className="w-fit font-mono text-xs uppercase tracking-widest text-muted">
-        ← Uniswap Strategy Advisor
+        {t.pool.back}
       </Link>
-      <EducationalDisclaimer />
+      <EducationalDisclaimer t={t} />
       {children}
     </main>
   );
 }
 
-function AddressForm({ value }: { value?: string | undefined }) {
+function AddressForm({ t, value }: { t: Dictionary; value?: string | undefined }) {
   return (
     <form
       method="get"
@@ -51,7 +67,7 @@ function AddressForm({ value }: { value?: string | undefined }) {
       className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-5"
     >
       <label htmlFor="address" className="text-sm font-medium">
-        Ethereum mainnet Uniswap v3 pool address
+        {t.pool.addressLabel}
       </label>
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
@@ -71,13 +87,10 @@ function AddressForm({ value }: { value?: string | undefined }) {
           type="submit"
           className="rounded-md border border-border bg-background px-4 py-2 text-sm font-medium"
         >
-          Analyse
+          {t.pool.analyse}
         </button>
       </div>
-      <p className="text-xs leading-relaxed text-muted">
-        The address of the pool contract itself, not a token. Read-only: this application never
-        connects a wallet and never sends a transaction.
-      </p>
+      <p className="text-xs leading-relaxed text-muted">{t.pool.addressHelp}</p>
     </form>
   );
 }
@@ -87,20 +100,18 @@ export default async function PoolRangePage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const { locale, t } = await getRequestDictionary();
   const requested = (await searchParams).address;
   // A repeated parameter arrives as an array; only a single value is an address.
   const parsed = EvmAddressSchema.safeParse(typeof requested === "string" ? requested : undefined);
 
   if (!parsed.success) {
     return (
-      <Shell>
-        <AddressForm />
+      <Shell locale={locale} t={t}>
+        <AddressForm t={t} />
         {requested === undefined ? null : (
           /* Deliberately does not echo what was typed: it is unvalidated input. */
-          <p className="text-sm leading-relaxed text-muted">
-            That is not an Ethereum address. An address is <code>0x</code> followed by exactly 40
-            hexadecimal characters.
-          </p>
+          <p className="text-sm leading-relaxed text-muted">{t.pool.invalidAddress}</p>
         )}
       </Shell>
     );
@@ -109,9 +120,9 @@ export default async function PoolRangePage({
   const result = await getPoolRangeAnalysis(parsed.data);
 
   return (
-    <Shell>
-      <AddressForm value={parsed.data} />
-      <PoolRangeReport result={result} poolAddress={parsed.data} />
+    <Shell locale={locale} t={t}>
+      <AddressForm t={t} value={parsed.data} />
+      <PoolRangeReport result={result} poolAddress={parsed.data} t={t} locale={locale} />
     </Shell>
   );
 }

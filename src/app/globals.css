@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
+/*
+ * Three theme states, not two.
+ *
+ * "System" is the default and sets no attribute at all, so `prefers-color-scheme`
+ * decides — including for a reader with JavaScript disabled, who never gets an
+ * attribute set and still sees the palette their machine asked for. An explicit
+ * choice stamps `data-theme` on <html> and outranks the media query in both
+ * directions.
+ *
+ * The dark palette is written twice on purpose. Plain CSS has no way to share one
+ * block between a media query and an attribute selector, and the alternative —
+ * resolving "system" in JavaScript and always stamping an explicit value — would
+ * leave a no-JavaScript reader permanently in light mode.
+ */
+
 :root {
+  color-scheme: light;
+
   --background: #ffffff;
   --foreground: #0b0b0f;
   --muted: #5b5b6b;
@@ -13,7 +30,9 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
     --background: #0b0b0f;
     --foreground: #ededf2;
     --muted: #9a9aab;
@@ -24,6 +43,20 @@
     --warning-border: #4a3c12;
     --warning-foreground: #e8cf92;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0b0b0f;
+  --foreground: #ededf2;
+  --muted: #9a9aab;
+  --border: #26262f;
+  --surface: #131319;
+  --accent: #ff4d9d;
+  --warning-surface: #201a08;
+  --warning-border: #4a3c12;
+  --warning-foreground: #e8cf92;
 }
 
 @theme inline {

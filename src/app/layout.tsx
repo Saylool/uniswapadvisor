@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
+import { getRequestDictionary } from "@/lib/i18n/requestLocale";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme/theme";
+
 /*
  * Self-hosted rather than fetched from Google Fonts at build time.
  *
@@ -29,19 +32,38 @@ const geistMono = localFont({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Uniswap Strategy Advisor",
-  description:
-    "An educational AI-assisted advisor for Uniswap v3 and v4 liquidity strategies. Guidance only — not financial advice.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getRequestDictionary();
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+  return { title: t.metadata.title, description: t.metadata.description };
+}
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const { locale } = await getRequestDictionary();
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      /*
+       * The boot script below stamps `data-theme` on this element before React
+       * hydrates, so the server's markup and the browser's DOM differ here by
+       * design — and React reports that as a hydration error it cannot know is
+       * intended. Suppressing it applies to this element's own attributes only,
+       * not to anything inside, so nothing else is silenced.
+       */
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/*
+         * First thing in the body, and synchronous, so the stored theme is on
+         * the root element before anything paints. Any later — including
+         * anywhere React could put it — and a reader who chose dark gets a white
+         * flash on every navigation.
+         */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        {children}
+      </body>
     </html>
   );
 }

@@ -153,6 +153,41 @@ Two limits of that, stated rather than papered over:
   untouched. Running locally neither header exists and every request shares one
   bucket — the safe direction to fail.
 
+## Language and theme
+
+The interface is published in **English and Turkish**, and renders in the
+reader's language on the first paint rather than correcting it after hydration.
+An explicit choice is kept in a cookie and always wins; with no choice made, the
+`Accept-Language` header decides. Switching is a plain `<form>` driven by a
+Server Action, so it works with JavaScript disabled.
+
+Numbers follow the language too — a Turkish reader sees `%0,30` and
+`0,000333333`, not `0.30%`. The formatters still name their locale explicitly
+and default to English, so a bare call can never quietly follow the *host's*
+locale, which is the failure the pinning was there to prevent.
+
+**Warnings and failure messages stay in English.** They are produced in the data
+layer as fixed sentences — that fixedness is what makes identical input warn
+identically — so translating them means turning them into codes the interface
+resolves. That is a change to a layer verified line by line, and it is its own
+phase rather than a detail of this one.
+
+Theme has three states, not two: **System, Light, Dark**. System sets no
+attribute and lets `prefers-color-scheme` keep deciding, including for a reader
+with JavaScript off. An explicit choice lives in `localStorage`, not a cookie,
+because a cookie would make changing a colour re-render the page — and on
+`/pool` a re-render means reading a subgraph and making an `eth_call`, so
+switching theme would spend API quota and a rate-limit slot. A small synchronous
+script at the top of `<body>` applies the stored theme before anything paints;
+without it, every navigation flashes light before turning dark.
+
+The theme toggle is the application's **only Client Component**. Everything else,
+including both switchers' markup, is still server-rendered.
+
+Reading a cookie and a header makes a route dynamic, so the landing page is no
+longer statically prerendered. That is the price of being correct on the first
+paint, and it costs no upstream calls.
+
 Still absent: no recommendation policy, no risk categories, no AI, no persistence
 and no wallet connection.
 
@@ -232,6 +267,8 @@ user input
 | `src/lib/format`      | Deterministic display formatting. Locale-pinned so server-rendered output cannot vary by host. |
 | `src/lib/observability` | Server-side diagnostics for failed reads. Records status codes, never URLs or headers. |
 | `src/lib/ratelimit`   | Fixed-window request counter and the client key it counts against. Pure; the clock is injected. |
+| `src/lib/i18n`        | Published languages, how one is negotiated, and every interface string in each. |
+| `src/lib/theme`       | The three theme choices, the store behind the toggle, and the script that applies one before paint. |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
 | `src/schemas`         | The normalized domain contracts: Zod schemas plus the types inferred from them. |

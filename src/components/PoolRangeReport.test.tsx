@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { DataResult, PoolDailyPriceHistory, PoolMarketSnapshot, V3Pool } from "../schemas";
 import { analysePoolRange, DEFAULT_PRICE_BAND_PARAMETERS } from "../lib/advisor/poolRangeAnalysis";
 import { formatPercent, formatPrice } from "../lib/format/displayFormats";
+import { getDictionary } from "../lib/i18n/dictionaries";
 import { PoolRangeReport } from "./PoolRangeReport";
 
 /*
@@ -79,8 +80,15 @@ const analyse = (overrides: Partial<Parameters<typeof analysePoolRange>[0]> = {}
     ...overrides,
   });
 
-const render = (result: ReturnType<typeof analysePoolRange>) =>
-  renderToStaticMarkup(<PoolRangeReport result={result} poolAddress={POOL_ID} />);
+const render = (result: ReturnType<typeof analysePoolRange>, locale: "en" | "tr" = "en") =>
+  renderToStaticMarkup(
+    <PoolRangeReport
+      result={result}
+      poolAddress={POOL_ID}
+      t={getDictionary(locale)}
+      locale={locale}
+    />,
+  );
 
 describe("PoolRangeReport", () => {
   const markup = render(analyse());
@@ -192,6 +200,57 @@ describe("PoolRangeReport", () => {
 
     expect(noTvl).not.toContain("$0");
     expect(noTvl).toContain("—");
+  });
+});
+
+describe("PoolRangeReport in Turkish", () => {
+  const markup = render(analyse(), "tr");
+
+  it("translates the labels", () => {
+    expect(markup).toContain("Önerilen tick aralığı");
+    expect(markup).toContain("Alt tick");
+    expect(markup).toContain("Güncel durum");
+    expect(markup).toContain("Tarihsel volatilite");
+    expect(markup).not.toContain("Suggested tick range");
+    expect(markup).not.toContain("Current state");
+  });
+
+  it("writes the numbers the way Turkish writes them", () => {
+    // Half a translation would keep "0.30%" and "0.000333333" here.
+    expect(markup).toContain("%0,30"); // the fixture pool's 3000 ppm fee tier
+    expect(markup).toContain("0,000333333");
+  });
+
+  it("keeps the pool's own symbols and address untouched", () => {
+    expect(markup).toContain("USDC");
+    expect(markup).toContain("WETH");
+    expect(markup).toContain(POOL_ID);
+  });
+
+  it("names the stage that stopped, in Turkish", () => {
+    const failed = render(
+      {
+        status: "unavailable",
+        step: "history",
+        reason: "network-error",
+        message: "The market data service could not be reached.",
+      },
+      "tr",
+    );
+
+    expect(failed).toContain("havuzun günlük fiyat geçmişi okunurken");
+    /*
+     * The message itself stays English. It is produced in the data layer as a
+     * fixed sentence, and translating it means turning it into a code there
+     * rather than text here — a change to a layer this project has verified line
+     * by line, and its own phase.
+     */
+    expect(failed).toContain("The market data service could not be reached.");
+  });
+
+  it("formats every figure it shows", () => {
+    expect(markup).not.toContain("NaN");
+    expect(markup).not.toContain("undefined");
   });
 });
 
