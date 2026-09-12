@@ -64,19 +64,32 @@ export const V4TickSpacingSchema = tickSpacingUpTo(V4_MAX_TICK_SPACING);
 
 export type TickSpacing = z.infer<typeof V3TickSpacingSchema>;
 
-/**
- * A tick index. Bounded by TickMath's MIN_TICK/MAX_TICK, which are the same
- * constants in v3 and v4.
+/*
+ * TickMath's addressable range, identical in v3 and v4. v3-core declares
+ * `int24 MIN_TICK = -887272` and `int24 MAX_TICK = -MIN_TICK`, so the mirror is
+ * written out here rather than restated as a second literal.
+ *
+ * These are the bounds on a tick *index*. They are not the bounds on a usable
+ * position boundary: a pool only accepts ticks that are also multiples of its
+ * tick spacing, and MIN_TICK/MAX_TICK are not multiples of most spacings.
  */
-export const TickSchema = z.int().min(-887272).max(887272);
+export const MIN_TICK = -887_272;
+export const MAX_TICK = -MIN_TICK;
+
+/** A tick index, bounded by TickMath. */
+export const TickSchema = z.int().min(MIN_TICK).max(MAX_TICK);
 
 export type Tick = z.infer<typeof TickSchema>;
+
+/** ERC-20 declares `decimals()` as uint8, so 0-255 is a protocol invariant. */
+export const TokenDecimalsSchema = z.int().min(0).max(255);
+
+export type TokenDecimals = z.infer<typeof TokenDecimalsSchema>;
 
 const tokenShape = {
   chainId: ChainIdSchema,
   symbol: z.string().min(1, { error: "Token symbol must not be empty." }),
-  /** ERC-20 declares `decimals()` as uint8, so 0-255 is a protocol invariant. */
-  decimals: z.int().min(0).max(255),
+  decimals: TokenDecimalsSchema,
   name: z.string().min(1).optional(),
 } as const;
 

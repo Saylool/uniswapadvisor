@@ -12,8 +12,8 @@ not guarantee returns, and cannot attest that any smart contract is safe.
 Early. The landing page is static, and there is no AI integration, persistence,
 authentication, wallet connection or transaction capability of any kind.
 
-Two read-only market-data adapters exist, both server-only readers over The Graph
-and neither wired to any route or component yet:
+Three read-only market-data adapters exist, all server-only readers over The
+Graph and none wired to any route or component yet:
 
 1. **Current pool snapshot** — one Ethereum mainnet Uniswap v3 pool, normalised
    into a `PoolMarketSnapshot`.
@@ -24,8 +24,7 @@ and neither wired to any route or component yet:
 3. **Daily price history** — the previous 31 *completed* UTC days of closing
    prices for one such pool, normalised into a `PoolDailyPriceHistory`. 31 closes
    give 30 daily returns, which is what a 30-day volatility figure needs. The
-   current, still-incomplete UTC day is always excluded. Nothing consumes this
-   yet: no volatility, return or risk calculation is implemented.
+   current, still-incomplete UTC day is always excluded.
 
 Days the source never indexed are reported as gaps, never invented. There is no
 forward-filling of a previous close and no treating a missing day as zero, so a
@@ -65,8 +64,29 @@ with their own spacing. So it is read directly from the pool contract with a
 read-only `eth_call` to `tickSpacing()`, and `fetchEthereumV3Pool` combines that
 with the subgraph metadata into a complete `V3Pool`.
 
-That gives tick conversion all three inputs it needs — token ordering, token
-decimals and tick spacing — but the conversion itself is not written yet.
+That gives tick conversion all three inputs it needs, and the conversion itself
+now exists as a pure module (`src/lib/uniswap/v3TickMath.ts`): a human price maps
+to the tick at or below it and to the tick at or above it, a tick maps back to a
+price, and a tick rounds to a boundary the pool will accept.
+
+Two details there are worth stating, because getting either wrong yields a number
+that looks perfectly ordinary. First, a tick encodes `1.0001^t` as token1 per
+token0 in *raw* units, so a human price must be shifted by
+`10^(token1Decimals - token0Decimals)` before the logarithm — omit it and a
+USDC/WETH range lands twelve orders of magnitude away from the pool. Second,
+alignment folds the remainder into `[0, tickSpacing)` before subtracting it,
+because JavaScript's `%` truncates toward zero and would round negative ticks the
+wrong way; most pools holding a 6-decimal token as token0 sit entirely in negative
+ticks.
+
+Alignment always returns a tick a pool accepts: a multiple of the spacing, inside
+a range that is *narrower* than `MIN_TICK`/`MAX_TICK`, since ±887272 is only a
+multiple of the spacing when the spacing is 1 — for the 0.30% tier the real floor
+is -887220. A price outside TickMath's range comes back clamped with the bound it
+hit named, so a truncated range can never be mistaken for a requested one.
+
+What is still missing is the composition: nothing yet turns a price band plus a
+`V3Pool` into an aligned tick range.
 
 Nothing consumes any of this yet: no recommendation policy, risk categories, AI,
 API routes or UI.
@@ -80,8 +100,8 @@ Shared limits of both adapters:
   exposes a lifetime cumulative total, which is not a rolling window, so those
   fields stay `null` and the call returns a `partial` result naming them. No
   figure is estimated to fill the gap.
-- Full `V3Pool` metadata is not built, because the pool entity does not report
-  `tickSpacing`.
+- The subgraph alone cannot build a full `V3Pool`, because the pool entity does
+  not report `tickSpacing`. `fetchEthereumV3Pool` adds it from the contract.
 
 ## Getting started
 
@@ -135,7 +155,7 @@ user input
 | --------------------- | --------------------------------------------------------------------------- |
 | `src/app`             | App Router routes, layouts and route handlers.                              |
 | `src/components`      | Presentational React components. No data fetching, no secrets.              |
-| `src/lib/uniswap`     | One isolated service module per external source (v3 subgraph, v4 subgraph, hook registry). |
+| `src/lib/uniswap`     | One isolated service module per external source (v3 subgraph, v4 subgraph, JSON-RPC), plus pure Uniswap protocol math such as tick conversion. |
 | `src/lib/analytics`   | Deterministic, dependency-free calculations: volatility, ranges, ratios.    |
 | `src/lib/ai`          | OpenAI client wiring and response handling.                                 |
 | `src/lib/ai/prompts`  | One module per feature, composed on top of a shared base instruction module. |
